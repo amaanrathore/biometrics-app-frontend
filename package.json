@@ -1,0 +1,33 @@
+{
+  "name": "biometric-frontend",
+  "version": "1.0.0",
+  "dependencies": {
+    "axios": "^1.10.0",
+    "chart.js": "^4.5.0",
+    "framer-motion": "^6.5.1",
+    "react": "^17.0.2",
+    "react-chartjs-2": "^5.3.0",
+    "react-dom": "^17.0.2",
+    "three": "^0.128.0",
+    "vanta": "^0.5.24"
+  },
+  "scripts": {
+    "start": "react-scripts start",
+    "build": "react-scripts build"
+  },
+  "devDependencies": {
+    "react-scripts": "^5.0.1"
+  },
+  "browserslist": {
+    "production": [
+      ">0.2%",
+      "not dead",
+      "not op_mini all"
+    ],
+    "development": [
+      "last 1 chrome version",
+      "last 1 firefox version",
+      "last 1 safari version"
+    ]
+  }
+}

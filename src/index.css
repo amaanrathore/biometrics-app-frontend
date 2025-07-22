@@ -1,0 +1,26 @@
+/* frontend/src/index.css */
+body {
+  font-family: 'Inter', sans-serif;
+}
+.dark .bg-white {
+  background-color: #1f2937;
+  color: #e5e7eb;
+}
+.dark .bg-blue-100 {
+  background-color: #1e3a8a;
+}
+.dark .text-gray-700 {
+  color: #d1d5db;
+}
+.dark .text-gray-500 {
+  color: #9ca3af;
+}
+.dark .text-red-500 {
+  color: #f87171;
+}
+.text-blue-900 {
+  color: #0055A4;
+}
+.dark .text-yellow-300 {
+  color: #FFC107;
+}
