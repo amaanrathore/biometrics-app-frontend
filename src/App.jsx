@@ -24,7 +24,8 @@ function App() {
   const vantaRef = useRef(null);
   const vantaEffect = useRef(null);
 
-  const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || 'https://biometrics-dashboard.onrender.com/';
+  const rawUrl = process.env.REACT_APP_BACKEND_URL || 'https://biometrics-dashboard.onrender.com/';
+  const BACKEND_URL = rawUrl.replace(/\/+$/, ""); // removes trailing slashes
 
   // Initialize VANTA effect only once on mount
   useEffect(() => {
