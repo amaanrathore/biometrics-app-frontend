@@ -4,8 +4,6 @@ import axios from 'axios';
 import { Line, Pie, Bar } from 'react-chartjs-2';
 import { Chart as ChartJS, CategoryScale, LinearScale, LineElement, PointElement, ArcElement, Title, Tooltip, Legend, BarElement } from 'chart.js';
 import * as THREE from 'three';
-// Corrected import: Vanta.js typically attaches to the global window object.
-// We import the minified file to ensure it's loaded, but access it via window.
 import "vanta/dist/vanta.dots.min"; 
 
 ChartJS.register(CategoryScale, LinearScale, LineElement, PointElement, ArcElement, Title, Tooltip, Legend, BarElement);
@@ -16,7 +14,7 @@ function App() {
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState('');
   const [records, setRecords] = useState([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(false); // For search loading
   const [error, setError] = useState(null);
   const [theme, setTheme] = useState('light');
   const [isLoggedIn, setIsLoggedIn] = useState(false);
@@ -24,21 +22,112 @@ function App() {
   const [password, setPassword] = useState('');
   const [loginError, setLoginError] = useState('');
   const vantaRef = useRef(null);
-  const vantaEffect = useRef(null); // Keep this ref for Vanta instance
+  const vantaEffect = useRef(null);
 
-  // --- NEW STATE FOR FILE UPLOADS ---
   const [employeeFile, setEmployeeFile] = useState(null);
   const [attendanceFile, setAttendanceFile] = useState(null);
   const [uploadMessage, setUploadMessage] = useState('');
-  const [uploadLoading, setUploadLoading] = useState(false);
-  const [dashboardDownloadUrl, setDashboardDownloadUrl] = useState(''); // To store download URL for the generated Excel
+  const [uploadLoading, setUploadLoading] = useState(false); // Separate loading for upload
+  const [dashboardDownloadUrl, setDashboardDownloadUrl] = useState('');
 
-  const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || 'http://localhost:10000'; // Ensure this matches your Flask port
+  const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || 'http://localhost:10000';
+
+  // Function to fetch employees (now a standalone function)
+  const fetchEmployees = async () => {
+    setLoading(true); // Indicate loading for employee list
+    setError(null); // Clear previous errors
+    try {
+      console.log('Fetching employees from:', `${BACKEND_URL}/api/employees`);
+      // INCREASED TIMEOUT HERE TO 30 SECONDS (or more if needed)
+      const response = await axios.get(`${BACKEND_URL}/api/employees`, { timeout: 30000 }); 
+      console.log('Employees API Response:', response.data);
+      setEmployees(response.data.employees);
+      if (response.data.message) {
+          setError(response.data.message);
+      } else {
+          setError(null);
+      }
+    } catch (err) {
+      console.error('Error fetching employees:', err);
+      let errorMessage = 'Failed to fetch employee list. Please ensure the backend server is running and data has been processed.';
+      if (err.code === 'ECONNABORTED' && err.message.includes('timeout')) {
+          errorMessage = 'Request to fetch employees timed out. Backend might be busy or slow.';
+      } else if (err.response) {
+          errorMessage = `Server responded with status ${err.response.status}: ${err.response.data.message || err.message}`;
+      }
+      setError(errorMessage);
+      setEmployees([]); // Clear employees on error
+    } finally {
+      setLoading(false); // End loading for employee list
+    }
+  };
+
+  // Function to fetch records (now a standalone function)
+  const fetchRecords = async () => {
+    setLoading(true); // Indicate loading for records
+    setError(null);
+    setUploadMessage('');
+    setDashboardDownloadUrl('');
+
+    const trimmedEmployeeId = employeeId.trim();
+    const trimmedFromDate = fromDate.trim();
+    const trimmedToDate = toDate.trim();
+
+    if (!trimmedEmployeeId && (!trimmedFromDate && !trimmedToDate)) {
+      setError('Please select an employee or a date range to search.');
+      setLoading(false);
+      return;
+    }
+    // Removed the strict date range requirement for specific employee search
+    // as it might not always be desired to pick both dates.
+    // if (trimmedEmployeeId && (!trimmedFromDate || !trimmedToDate)) {
+    //   setError('Please select both "From Date" and "To Date" when searching for a specific employee.');
+    //   setLoading(false);
+    //   return;
+    // }
+
+    try {
+      console.log('Fetching records from:', `${BACKEND_URL}/api/search`);
+      const response = await axios.get(`${BACKEND_URL}/api/search`, {
+        params: { employee_id: trimmedEmployeeId, from_date: trimmedFromDate, to_date: trimmedToDate },
+        timeout: 15000 // Keep this reasonable, but can be increased if search is slow
+      });
+      console.log('API Request URL:', `${BACKEND_URL}/api/search?employee_id=${trimmedEmployeeId}&from_date=${trimmedFromDate}&to_date=${trimmedToDate}`);
+      console.log('API Response:', response.data);
+      setRecords(response.data.records);
+      if (response.data.records.length === 0) {
+        setError(response.data.message || 'No records found for the selected criteria.');
+      } else {
+          setError(null);
+      }
+    } catch (err) {
+      console.error('Error fetching records:', err);
+      let errorMessage = 'Failed to fetch records: ' + err.message;
+      if (err.code === 'ECONNREFUSED') {
+        errorMessage = 'Cannot connect to the backend server. Please ensure it is running and accessible.';
+      } else if (err.response) {
+        errorMessage = `Server responded with status ${err.response.status}: ${err.response.data.message || err.message}`;
+      } else if (err.code === 'ERR_CORS') {
+        errorMessage = 'CORS issue detected. Check your backend CORS configuration.';
+      } else if (err.code === 'ERR_NETWORK') {
+        errorMessage = 'Network error. Please check your internet connection.';
+      } else if (err.code === 'ECONNABORTED' && err.message.includes('timeout')) {
+          errorMessage = 'Request to fetch records timed out. Backend might be busy or slow.';
+      } else if (err.code === 'ERR_BAD_RESPONSE') {
+        errorMessage = 'Received a bad response from the server. Check backend logs.';
+      }
+      setError(errorMessage);
+      setRecords([]);
+    } finally {
+      setLoading(false); // End loading for records
+    }
+  };
+
 
   // Initialize VANTA effect only once on mount
   useEffect(() => {
     if (vantaRef.current && !vantaEffect.current) {
-      vantaEffect.current = window.VANTA.DOTS({ // Access VANTA from window
+      vantaEffect.current = window.VANTA.DOTS({
         el: vantaRef.current,
         THREE: THREE,
         mouseControls: true,
@@ -48,8 +137,8 @@ function App() {
         minWidth: 200.0,
         scale: 1.0,
         scaleMobile: 1.0,
-        color: theme === 'dark' ? 0xdddddd : 0x222222, // Dynamic color based on theme
-        backgroundColor: theme === 'dark' ? 0x1a202c : 0xf7fafc // Dynamic background based on theme
+        color: theme === 'dark' ? 0xdddddd : 0x222222,
+        backgroundColor: theme === 'dark' ? 0x1a202c : 0xf7fafc
       });
     }
 
@@ -59,7 +148,7 @@ function App() {
       }
       vantaEffect.current = null;
     };
-  }, []); // Empty dependency array for mount only
+  }, []);
 
   // Update VANTA background color on theme change
   useEffect(() => {
@@ -82,35 +171,18 @@ function App() {
 
   // Fetch employees on component mount and after successful upload
   useEffect(() => {
-    const fetchEmployees = async () => {
-      try {
-        console.log('Fetching employees from:', `${BACKEND_URL}/api/employees`);
-        const response = await axios.get(`${BACKEND_URL}/api/employees`, { timeout: 5000 });
-        console.log('Employees API Response:', response.data);
-        setEmployees(response.data.employees);
-        if (response.data.message) { // Backend might send a message if no data is available
-            setError(response.data.message);
-        } else {
-            setError(null); // Clear previous errors if data is fetched
-        }
-      } catch (err) {
-        console.error('Error fetching employees:', err);
-        setError('Failed to fetch employee list. Please ensure the backend server is running and data has been processed.');
-      }
-    };
-    if (isLoggedIn) { // Only fetch if logged in
-        fetchEmployees();
+    if (isLoggedIn) {
+        fetchEmployees(); // Call the standalone function
     }
-  }, [BACKEND_URL, isLoggedIn, uploadMessage]); // Re-fetch when uploadMessage changes (after successful upload) or login state changes
+  }, [isLoggedIn, uploadMessage]); // Re-fetch when uploadMessage changes (after successful upload) or login state changes
 
   const handleLogin = (e) => {
     e.preventDefault();
-    // Use your actual login credentials
     if (email === 'admin@artpark.com' && password === 'password123') {
       setIsLoggedIn(true);
       setLoginError('');
-      // After successful login, attempt to load initial data
-      handleSearch(); 
+      // No need to call handleSearch here, useEffect will fetch employees
+      // and initial data will be loaded when an employee is selected or search is performed.
     } else {
       setLoginError('Invalid email or password');
     }
@@ -120,85 +192,34 @@ function App() {
     setIsLoggedIn(false);
     setEmail('');
     setPassword('');
-    setRecords([]); // Clear records on logout
+    setRecords([]);
     setEmployeeId('');
     setFromDate('');
     setToDate('');
     setError(null);
     setUploadMessage('');
     setDashboardDownloadUrl('');
+    setEmployees([]); // Clear employees on logout
   };
 
   const toggleTheme = () => {
     setTheme(prevTheme => (prevTheme === 'light' ? 'dark' : 'light'));
   };
 
-  const handleSearch = async () => {
-    setLoading(true);
-    setError(null); // Clear general error
-    setUploadMessage(''); // Clear upload message on new search
-    setDashboardDownloadUrl(''); // Clear download URL on new search
-
-    const trimmedEmployeeId = employeeId.trim();
-    const trimmedFromDate = fromDate.trim();
-    const trimmedToDate = toDate.trim();
-
-    // Allow searching all records if no employee ID is provided but dates are
-    if (!trimmedEmployeeId && (!trimmedFromDate && !trimmedToDate)) {
-      setError('Please select an employee or a date range to search.');
-      setLoading(false);
-      return;
-    }
-    if (trimmedEmployeeId && (!trimmedFromDate || !trimmedToDate)) {
-      setError('Please select both "From Date" and "To Date" when searching for a specific employee.');
-      setLoading(false);
-      return;
-    }
-
-    try {
-      console.log('Fetching records from:', `${BACKEND_URL}/api/search`);
-      const response = await axios.get(`${BACKEND_URL}/api/search`, {
-        params: { employee_id: trimmedEmployeeId, from_date: trimmedFromDate, to_date: trimmedToDate },
-        timeout: 10000 // Increased timeout for potentially larger data fetches
-      });
-      console.log('API Request URL:', `${BACKEND_URL}/api/search?employee_id=${trimmedEmployeeId}&from_date=${trimmedFromDate}&to_date=${trimmedToDate}`);
-      console.log('API Response:', response.data);
-      setRecords(response.data.records);
-      if (response.data.records.length === 0) {
-        setError(response.data.message || 'No records found for the selected criteria.');
-      } else {
-          setError(null); // Clear previous errors if data is found
-      }
-    } catch (err) {
-      console.error('Error fetching records:', err);
-      let errorMessage = 'Failed to fetch records: ' + err.message;
-      if (err.code === 'ECONNREFUSED') {
-        errorMessage = 'Cannot connect to the backend server. Please ensure it is running and accessible.';
-      } else if (err.response) {
-        errorMessage = `Server responded with status ${err.response.status}: ${err.response.data.message || err.message}`;
-      } else if (err.code === 'ERR_CORS') {
-        errorMessage = 'CORS issue detected. Check your backend CORS configuration.';
-      } else if (err.code === 'ERR_NETWORK') {
-        errorMessage = 'Network error. Please check your internet connection.';
-      } else if (err.code === 'ERR_BAD_RESPONSE') {
-        errorMessage = 'Received a bad response from the server. Check backend logs.';
-      }
-      setError(errorMessage);
-      setRecords([]);
-    }
-    setLoading(false);
+  // Changed handleSearch to call the standalone fetchRecords
+  const handleSearch = () => {
+    fetchRecords();
   };
 
-  // --- NEW FILE UPLOAD HANDLERS ---
   const handleEmployeeFileChange = (e) => {
     setEmployeeFile(e.target.files[0]);
-    setUploadMessage(''); // Clear messages on new file selection
+    setUploadMessage('');
     setDashboardDownloadUrl('');
   };
 
   const handleAttendanceFileChange = (e) => {
     setAttendanceFile(e.target.files[0]);
-    setUploadMessage(''); // Clear messages on new file selection
+    setUploadMessage('');
     setDashboardDownloadUrl('');
   };
 
@@ -210,28 +231,30 @@ function App() {
 
     setUploadLoading(true);
     setUploadMessage('');
-    setError(null); // Clear general error
+    setError(null);
     setDashboardDownloadUrl('');
 
     const formData = new FormData();
-    formData.append('employee_file', employeeFile); // Key must match Flask's request.files['employee_file']
-    formData.append('attendance_file', attendanceFile); // Key must match Flask's request.files['attendance_file']
+    formData.append('employee_file', employeeFile);
+    formData.append('attendance_file', attendanceFile);
 
     try {
       console.log('Uploading files to:', `${BACKEND_URL}/api/upload`);
+      // INCREASED TIMEOUT FOR UPLOAD TO 2 MINUTES (120000 ms)
       const response = await axios.post(`${BACKEND_URL}/api/upload`, formData, {
         headers: {
           'Content-Type': 'multipart/form-data',
         },
-        timeout: 120000 // Increased timeout for potentially long processing
+        timeout: 120000 
       });
       console.log('Upload API Response:', response.data);
       setUploadMessage(response.data.message || 'Files uploaded and processed successfully!');
       if (response.data.download_url) {
-          setDashboardDownloadUrl(`${BACKEND_URL}${response.data.download_url}`);
+          setDashboardDownloadUrl(`${BACKEND_URL}${response.data.download_url}`); // Ensure correct URL construction
       }
-      // After successful upload and processing, trigger a search to load the new data
-      handleSearch(); 
+      // After successful upload and processing, trigger a refresh of employees and records
+      fetchEmployees(); // Refresh employee list
+      fetchRecords();   // Refresh records based on current filters (or clear if no filters)
     } catch (err) {
       console.error('Error uploading files:', err);
       let errorMessage = 'Failed to upload and process files.';
@@ -241,13 +264,18 @@ function App() {
           errorMessage = 'Cannot connect to the backend server. Please ensure it is running.';
       } else if (err.code === 'ERR_NETWORK') {
           errorMessage = 'Network error during upload. Please check your connection.';
+      } else if (err.code === 'ECONNABORTED' && err.message.includes('timeout')) {
+          errorMessage = 'Upload request timed out. Backend processing is taking too long.';
       }
       setUploadMessage(errorMessage);
-      setError(errorMessage); // Also show in main error area
+      setError(errorMessage);
     } finally {
       setUploadLoading(false);
-      setEmployeeFile(null); // Clear selected files
+      // Clear selected files after upload attempt (success or failure)
+      setEmployeeFile(null);
       setAttendanceFile(null);
+      // Reset file input elements manually if needed, or rely on state clearing
+      document.querySelectorAll('input[type="file"]').forEach(input => input.value = '');
     }
   };
   // --- END NEW FILE UPLOAD HANDLERS ---
@@ -412,7 +440,7 @@ function App() {
       '10:30 - 11:29 AM (Late)': 0,
       '11:30 AM - 12:29 PM (Late)': 0,
       'After 12:30 PM (Late)': 0,
-      'Missing Check-In': 0, // Changed from 'N/A' to be more specific
+      'Missing Check-In': 0,
     };
     records.forEach(record => {
       if (record.Check_In && record.Check_In !== 'N/A' && record.Check_In !== '') {
@@ -433,7 +461,6 @@ function App() {
           timeBins['After 12:30 PM (Late)']++;
         }
       } else {
-        // Only increment 'Missing Check-In' if Check_In is truly missing/N/A
         timeBins['Missing Check-In']++;
       }
     });
@@ -642,7 +669,7 @@ function App() {
               whileFocus={{ scale: 1.02 }}
               value={employeeId}
               onChange={(e) => setEmployeeId(e.target.value)}
-              className="p-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-4 focus:ring-blue-300 bg-white text-black placeholder-gray-500 dark:bg-gray-800 dark:text-white dark:placeholder-gray-400 dark:border-gray-600 shadow-sm flex-1 min-w-[150px]"
+              className="p-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-4 focus:ring-blue-300 dark:bg-gray-700 dark:text-gray-100 dark:border-gray-600 shadow-sm flex-1 min-w-[150px]"
               aria-label="Select Employee"
             >
               <option value="">Select Employee</option>
@@ -658,7 +685,7 @@ function App() {
               placeholder="From Date"
               value={fromDate}
               onChange={(e) => setFromDate(e.target.value)}
-              className="p-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-4 focus:ring-blue-300 bg-white text-black placeholder-gray-500 dark:bg-gray-800 dark:text-white dark:placeholder-gray-400 dark:border-gray-600 shadow-sm flex-1 min-w-[150px]"
+              className="p-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-4 focus:ring-blue-300 dark:bg-gray-700 dark:text-gray-100 dark:border-gray-600 shadow-sm flex-1 min-w-[150px]"
               aria-label="From Date"
             />
             <motion.input
@@ -667,7 +694,7 @@ function App() {
               placeholder="To Date"
               value={toDate}
               onChange={(e) => setToDate(e.target.value)}
-              className="p-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-4 focus:ring-blue-300 bg-white text-black placeholder-gray-500 dark:bg-gray-800 dark:text-white dark:placeholder-gray-400 dark:border-gray-600 shadow-sm flex-1 min-w-[150px]"
+              className="p-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-4 focus:ring-blue-300 dark:bg-gray-700 dark:text-gray-100 dark:border-gray-600 shadow-sm flex-1 min-w-[150px]"
               aria-label="To Date"
             />
             <motion.button
