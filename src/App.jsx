@@ -2,25 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar, BarChart, Bar } from 'recharts';
 
 function App() {
-  // List of holidays (YYYY-MM-DD)
-  const holidays = [
-    "2025-01-26", // Republic Day
-    "2025-02-26", // Maha Shivaratri
-    "2025-03-14", // Holi
-    "2025-03-31", // Id-ul-Fitr
-    "2025-04-10", // Mahavir Jayanti
-    "2025-04-18", // Good Friday
-    "2025-05-12", // Buddha Purnima
-    "2025-06-07", // Id-ul-Zuha
-    "2025-07-06", // Muharram
-    "2025-08-15", // Independence Day
-    "2025-09-05", // Milad-un-Nabi
-    "2025-10-02", // Gandhi Jayanti
-    "2025-10-02", // Dussehra
-    "2025-10-20", // Diwali
-    "2025-11-05", // Guru Nanak Jayanti
-    "2025-12-25"  // Christmas
-  ];
   const [employeeId, setEmployeeId] = useState('');
   const [employees, setEmployees] = useState([]);
   const [fromDate, setFromDate] = useState('');
@@ -36,7 +17,7 @@ function App() {
   const [uploadLoading, setUploadLoading] = useState(false);
   const [dashboardDownloadUrl, setDashboardDownloadUrl] = useState('');
 
-  const BACKEND_URL = 'http://127.0.0.1:10000';
+  const BACKEND_URL = 'http://127.0.0.1:5000';
 
   // Fetch employees function
   const fetchEmployees = async () => {
@@ -155,15 +136,17 @@ function App() {
   };
 
   const handleEmployeeFileChange = (e) => {
-    setEmployeeFile(e.target.files[0]);
-    setUploadMessage('');
-    setDashboardDownloadUrl('');
+  console.log('Employee file selected:', e.target.files[0]);
+  setEmployeeFile(e.target.files[0]);
+  setUploadMessage('');
+  setDashboardDownloadUrl('');
   };
 
   const handleAttendanceFileChange = (e) => {
-    setAttendanceFile(e.target.files[0]);
-    setUploadMessage('');
-    setDashboardDownloadUrl('');
+  console.log('Attendance file selected:', e.target.files[0]);
+  setAttendanceFile(e.target.files[0]);
+  setUploadMessage('');
+  setDashboardDownloadUrl('');
   };
 
   const handleUpload = async () => {
@@ -178,8 +161,8 @@ function App() {
     setDashboardDownloadUrl('');
 
     const formData = new FormData();
-    formData.append('employee_file', employeeFile);
-    formData.append('attendance_file', attendanceFile);
+    formData.append('employeeFile', employeeFile);
+    formData.append('attendanceFile', attendanceFile);
 
     try {
       console.log('Uploading files to:', `${BACKEND_URL}/api/upload`);
@@ -267,9 +250,6 @@ function App() {
 
   const isPresent = r => (r.Status && r.Status.toLowerCase() === 'present');
 
-  // Helper: is holiday
-  const isHoliday = (dateStr) => holidays.includes(dateStr);
-
   const getAbsentDates = () => {
     if (!fromDate || !toDate) return [];
     const start = new Date(fromDate);
@@ -280,24 +260,10 @@ function App() {
       const dateStr = d.toISOString().split('T')[0];
       const dayOfWeek = d.toLocaleDateString('en-US', { weekday: 'long' });
       const isWeekend = dayOfWeek === 'Saturday' || dayOfWeek === 'Sunday';
-      if (isHoliday(dateStr)) continue; // Exclude holidays
       const isAbsent = (!recordDates.has(dateStr) && !isWeekend) || (records.find(r => r.Date === dateStr && r.Status === 'ABSENT'));
       if (isAbsent) absentDates.push({ date: dateStr, day: dayOfWeek });
     }
     return absentDates;
-  };
-
-  const getHolidayDates = () => {
-    if (!fromDate || !toDate) return [];
-    const start = new Date(fromDate);
-    const end = new Date(toDate);
-    const holidayDates = [];
-    for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
-      const dateStr = d.toISOString().split('T')[0];
-      const dayOfWeek = d.toLocaleDateString('en-US', { weekday: 'long' });
-      if (isHoliday(dateStr)) holidayDates.push({ date: dateStr, day: dayOfWeek });
-    }
-    return holidayDates;
   };
 
   const getExtraWorkingDates = () => records.filter(r => {
@@ -306,19 +272,19 @@ function App() {
   }).map(r => ({ date: r.Date, day: new Date(r.Date).toLocaleDateString('en-US', { weekday: 'long' }) }));
 
   // Calculate statistics (in correct order)
+  const totalAttendance = records.filter(r => r.Status === 'PRESENT').length;
+  const totalDays = fromDate && toDate
+    ? Math.floor((new Date(toDate) - new Date(fromDate)) / (1000 * 60 * 60 * 24)) + 1
+    : records.length;
+  
   const absentDates = getAbsentDates();
   const extraWorkingDates = getExtraWorkingDates();
-  const holidayDates = getHolidayDates();
   const totalAbsent = absentDates.length;
   const totalExtraWorking = extraWorkingDates.length;
-  const totalAttendance = records.filter(r => r.Status === 'PRESENT' && !isHoliday(r.Date)).length;
-  const totalDays = fromDate && toDate
-    ? Math.floor((new Date(toDate) - new Date(fromDate)) / (1000 * 60 * 60 * 24)) + 1 - holidayDates.length
-    : records.length;
-  // Use uncapped working hours for average calculation
-  const validRecords = records.filter(r => getWorkingHours(r, false) > 0 && !isHoliday(r.Date));
+  
+  const validRecords = records.filter(r => getWorkingHours(r) > 0);
   const avgWorkingHours = validRecords.length > 0 
-    ? (validRecords.reduce((sum, r) => sum + getWorkingHours(r, false), 0) / validRecords.length).toFixed(2) 
+    ? (validRecords.reduce((sum, r) => sum + getWorkingHours(r), 0) / validRecords.length).toFixed(2) 
     : '0.00';
 
   // Chart data
@@ -517,6 +483,10 @@ function App() {
             </div>
           </div>
 
+          {/* Debug output for button state */}
+          <div style={{marginBottom: '8px', fontSize: '12px', color: '#555'}}>
+            <strong>Debug:</strong> employeeFile: {employeeFile ? employeeFile.name : 'null'} | attendanceFile: {attendanceFile ? attendanceFile.name : 'null'} | uploadLoading: {uploadLoading ? 'true' : 'false'}
+          </div>
           <button
             onClick={handleUpload}
             disabled={!employeeFile || !attendanceFile || uploadLoading}
@@ -592,11 +562,10 @@ function App() {
                 <h2 className="text-2xl font-bold mb-4 text-blue-800 dark:text-yellow-300">📊 Summary</h2>
                 <div className="space-y-2 text-gray-900 dark:text-gray-100">
                   <p><span className="font-semibold">Total Attendance:</span> {totalAttendance} days</p>
-                  <p><span className="font-semibold">Total Days (excluding holidays):</span> {totalDays} days</p>
+                  <p><span className="font-semibold">Total Days:</span> {totalDays} days</p>
                   <p><span className="font-semibold text-red-500">Total Absent:</span> {totalAbsent} days</p>
                   <p><span className="font-semibold text-green-600">Extra Working:</span> {totalExtraWorking} days</p>
                   <p><span className="font-semibold">Avg Working Hours:</span> {avgWorkingHours} hrs</p>
-                  <p><span className="font-semibold text-yellow-600">Holidays:</span> {holidayDates.length} days</p>
                 </div>
                 
                 {absentDates.length > 0 && (
@@ -607,17 +576,6 @@ function App() {
                         <li key={index}>{date} ({day})</li>
                       ))}
                       {absentDates.length > 5 && <li>...and {absentDates.length - 5} more</li>}
-                    </ul>
-                  </div>
-                )}
-                {holidayDates.length > 0 && (
-                  <div className="mt-4">
-                    <p className="font-semibold text-yellow-700 dark:text-yellow-300 mb-2">🎉 Holiday Dates:</p>
-                    <ul className="list-disc pl-5 text-sm text-gray-900 dark:text-gray-100 max-h-24 overflow-y-auto">
-                      {holidayDates.slice(0, 5).map(({ date, day }, index) => (
-                        <li key={index}>{date} ({day})</li>
-                      ))}
-                      {holidayDates.length > 5 && <li>...and {holidayDates.length - 5} more</li>}
                     </ul>
                   </div>
                 )}
@@ -753,19 +711,7 @@ function App() {
                         </span>
                       </td>
                       <td className="py-3 px-4 text-center">
-                        {/* Flag logic: red for check-in after 9:30, white for on-time */}
-                        {(() => {
-                          const checkInTime = timeToHours(record.Check_In);
-                          if (record.Status === 'PRESENT') {
-                            if (checkInTime > 9.5) {
-                              return <span className="inline-block w-4 h-4 rounded-full bg-red-500 border-2 border-red-700"></span>;
-                            } else {
-                              return <span className="inline-block w-4 h-4 rounded-full bg-white border-2 border-gray-400"></span>;
-                            }
-                          } else {
-                            return <span className="inline-block w-4 h-4 rounded-full bg-gray-300 border-2 border-gray-400"></span>;
-                          }
-                        })()}
+                        <span className={`inline-block w-4 h-4 rounded-full ${record.Late_Flag ? 'bg-red-500' : 'bg-gray-300'} border-2 ${record.Late_Flag ? 'border-red-700' : 'border-gray-400'}`}></span>
                       </td>
                     </tr>
                   ))}
